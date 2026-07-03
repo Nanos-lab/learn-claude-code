@@ -30,18 +30,9 @@ Usage:
 import os
 import subprocess
 
-try:
-    import readline
-    # macOS 的 libedit 在处理中文输入时有退格问题，这四行修复它
-    readline.parse_and_bind('set bind-tty-special-chars off')
-    readline.parse_and_bind('set input-meta on')
-    readline.parse_and_bind('set output-meta on')
-    readline.parse_and_bind('set convert-meta off')
-except ImportError:
-    pass
-
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from anthropic.types import ToolParam
 
 load_dotenv(override=True)
 
@@ -51,28 +42,48 @@ if os.getenv("ANTHROPIC_BASE_URL"):
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
 MODEL = os.environ["MODEL_ID"]
 
-SYSTEM = f"You are a coding agent at {os.getcwd()}. Use bash to solve tasks. Act, don't explain."
+SYSTEM = f"You are a coding agent at {os.getcwd()}. Use Windows cmd.exe to solve tasks. Act, don't explain."
 
 # ── Tool definition: just bash ────────────────────────────
-TOOLS = [{
-    "name": "bash",
-    "description": "Run a shell command.",
-    "input_schema": {
-        "type": "object",
-        "properties": {"command": {"type": "string"}},
-        "required": ["command"],
-    },
-}]
+TOOLS: list[ToolParam] = [
+    {
+        "name": "run_command",  # 1. 将工具名称改为更通用或偏向 Windows 的名称
+        "description": "Run a Windows command line (cmd.exe) command.",  # 2. 描述中明确说明这是 Windows 命令行
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The cmd.exe command to run, e.g., 'dir' or 'ipconfig'.",  # 3. 增加提示，引导模型输出正确的 Windows 命令
+                }
+            },
+            "required": ["command"],
+        },
+    }
+]
 
 
 # ── Tool execution ────────────────────────────────────────
-def run_bash(command: str) -> str:
-    dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
+def run_command(command: str) -> str:
+    dangerous = [
+        "rmdir /s",
+        "del /f /s",
+        "format ",
+        "reg delete",
+        "shutdown /",
+        "powershell -Command",
+    ]
     if any(d in command for d in dangerous):
         return "Error: Dangerous command blocked"
     try:
-        r = subprocess.run(command, shell=True, cwd=os.getcwd(),
-                           capture_output=True, text=True, timeout=120)
+        r = subprocess.run(
+            command,
+            shell=True,
+            cwd=os.getcwd(),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
         out = (r.stdout + r.stderr).strip()
         return out[:50000] if out else "(no output)"
     except subprocess.TimeoutExpired:
@@ -85,8 +96,11 @@ def run_bash(command: str) -> str:
 def agent_loop(messages: list):
     while True:
         response = client.messages.create(
-            model=MODEL, system=SYSTEM, messages=messages,
-            tools=TOOLS, max_tokens=8000,
+            model=MODEL,
+            system=SYSTEM,
+            messages=messages,
+            tools=TOOLS,
+            max_tokens=8000,
         )
 
         # Append assistant turn
@@ -100,14 +114,17 @@ def agent_loop(messages: list):
         results = []
         for block in response.content:
             if block.type == "tool_use":
-                print(f"\033[33m$ {block.input['command']}\033[0m")
-                output = run_bash(block.input["command"])
-                print(output[:200])
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": output,
-                })
+                if isinstance(block.input["command"], str):
+                    print(f"\033[33m$ {block.input['command']}\033[0m")
+                    output = run_command(block.input["command"])
+                    print(output[:200])
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": output,
+                    }
+                )
 
         # Feed tool results back, loop continues
         messages.append({"role": "user", "content": results})
