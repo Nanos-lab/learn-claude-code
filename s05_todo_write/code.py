@@ -31,11 +31,6 @@ Needs: pip install anthropic python-dotenv + ANTHROPIC_API_KEY in .env
 import ast, json, os, subprocess
 from pathlib import Path
 
-try:
-    import readline
-    readline.parse_and_bind('set bind-tty-special-chars off')
-except ImportError:
-    pass
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
@@ -60,120 +55,23 @@ SYSTEM = (
 # ═══════════════════════════════════════════════════════════
 #  FROM s02-s04 (unchanged): Tool Implementations
 # ═══════════════════════════════════════════════════════════
-
-def safe_path(p: str) -> Path:
-    path = (WORKDIR / p).resolve()
-    if not path.is_relative_to(WORKDIR):
-        raise ValueError(f"Path escapes workspace: {p}")
-    return path
-
-def run_bash(command: str) -> str:
-    try:
-        r = subprocess.run(command, shell=True, cwd=WORKDIR,
-                           capture_output=True, text=True, timeout=120)
-        out = (r.stdout + r.stderr).strip()
-        return out[:50000] if out else "(no output)"
-    except subprocess.TimeoutExpired:
-        return "Error: Timeout (120s)"
-
-def run_read(path: str, limit: int | None = None) -> str:
-    try:
-        lines = safe_path(path).read_text().splitlines()
-        if limit and limit < len(lines):
-            lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
-        return "\n".join(lines)
-    except Exception as e:
-        return f"Error: {e}"
-
-def run_write(path: str, content: str) -> str:
-    try:
-        file_path = safe_path(path)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(content)
-        return f"Wrote {len(content)} bytes to {path}"
-    except Exception as e:
-        return f"Error: {e}"
-
-def run_edit(path: str, old_text: str, new_text: str) -> str:
-    try:
-        file_path = safe_path(path)
-        text = file_path.read_text()
-        if old_text not in text:
-            return f"Error: text not found in {path}"
-        file_path.write_text(text.replace(old_text, new_text, 1))
-        return f"Edited {path}"
-    except Exception as e:
-        return f"Error: {e}"
-
-def run_glob(pattern: str) -> str:
-    import glob as g
-    try:
-        results = []
-        for match in g.glob(pattern, root_dir=WORKDIR):
-            if (WORKDIR / match).resolve().is_relative_to(WORKDIR):
-                results.append(match)
-        return "\n".join(results) if results else "(no matches)"
-    except Exception as e:
-        return f"Error: {e}"
-
+from Tools.File_Handle import File_Handle_TOOLS, File_Handle_Tools_Description
+from anthropic.types import ToolParam
 
 # ═══════════════════════════════════════════════════════════
 #  NEW in s05: todo_write tool — plan only, no execution
 # ═══════════════════════════════════════════════════════════
+from Tools.Todo_write import Todo_Write_Description, Todo_Write_TOOLS
 
-def _normalize_todos(todos):
-    if isinstance(todos, str):
-        try:
-            todos = json.loads(todos)
-        except json.JSONDecodeError:
-            try:
-                todos = ast.literal_eval(todos)
-            except (SyntaxError, ValueError):
-                return None, "Error: todos must be a list or JSON array string"
-    if not isinstance(todos, list):
-        return None, "Error: todos must be a list"
-    for i, t in enumerate(todos):
-        if not isinstance(t, dict):
-            return None, f"Error: todos[{i}] must be an object"
-        if "content" not in t or "status" not in t:
-            return None, f"Error: todos[{i}] missing 'content' or 'status'"
-        if t["status"] not in ("pending", "in_progress", "completed"):
-            return None, f"Error: todos[{i}] has invalid status '{t['status']}'"
-    return todos, None
+TOOLS: list[ToolParam] = []
+TOOLS.extend(File_Handle_Tools_Description)
+TOOLS.extend(Todo_Write_Description)
+# s05: new tool
 
-def run_todo_write(todos: list) -> str:
-    global CURRENT_TODOS
-    todos, error = _normalize_todos(todos)
-    if error:
-        return error
-    CURRENT_TODOS = todos
-    lines = ["\n\033[33m## Current Tasks\033[0m"]
-    for t in CURRENT_TODOS:
-        icon = {"pending": " ", "in_progress": "\033[36m▸\033[0m", "completed": "\033[32m✓\033[0m"}[t["status"]]
-        lines.append(f"  [{icon}] {t['content']}")
-    print("\n".join(lines))
-    return f"Updated {len(CURRENT_TODOS)} tasks"
 
-TOOLS = [
-    {"name": "bash", "description": "Run a shell command.",
-     "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}},
-    {"name": "read_file", "description": "Read file contents.",
-     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["path"]}},
-    {"name": "write_file", "description": "Write content to a file.",
-     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}},
-    {"name": "edit_file", "description": "Replace exact text in a file once.",
-     "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "old_text": {"type": "string"}, "new_text": {"type": "string"}}, "required": ["path", "old_text", "new_text"]}},
-    {"name": "glob", "description": "Find files matching a glob pattern.",
-     "input_schema": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}},
-    # s05: new tool
-    {"name": "todo_write", "description": "Create and manage a task list for your current coding session.",
-     "input_schema": {"type": "object", "properties": {"todos": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}}, "required": ["content", "status"]}}}, "required": ["todos"]}},
-]
-
-TOOL_HANDLERS = {
-    "bash": run_bash, "read_file": run_read, "write_file": run_write,
-    "edit_file": run_edit, "glob": run_glob, "todo_write": run_todo_write,
-}
+TOOL_HANDLERS = {}
+TOOL_HANDLERS.update(File_Handle_TOOLS)
+TOOL_HANDLERS.update(Todo_Write_TOOLS)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -182,8 +80,10 @@ TOOL_HANDLERS = {
 
 HOOKS = {"UserPromptSubmit": [], "PreToolUse": [], "PostToolUse": [], "Stop": []}
 
+
 def register_hook(event: str, callback):
     HOOKS[event].append(callback)
+
 
 def trigger_hooks(event: str, *args):
     for callback in HOOKS[event]:
@@ -192,35 +92,44 @@ def trigger_hooks(event: str, *args):
             return result
     return None
 
-# s04 hooks preserved
-DENY_LIST = ["rm -rf /", "sudo", "shutdown", "reboot", "mkfs", "dd if="]
 
+# s04 hooks preserved
 def permission_hook(block):
-    """PreToolUse: deny list check."""
-    if block.name == "bash":
-        for p in DENY_LIST:
-            if p in block.input.get("command", ""):
-                print(f"\n\033[31m⛔ Blocked: '{p}'\033[0m")
-                return "Permission denied"
+    """PreToolUse: s03 check_permission() logic moved here."""
+    if block.name in ("write_file", "edit_file", "create_file"):
+        path = block.input.get("path", "")
+        if not (WORKDIR / path).resolve().is_relative_to(WORKDIR):
+            print(f"\n\033[33m⚠  Writing outside workspace\033[0m")
+            print(f"   Tool: {block.name}({block.input})")
+            choice = input("   Allow? [y/N] ").strip().lower()
+            if choice not in ("y", "yes"):
+                return "Permission denied by user"
     return None
+
 
 def log_hook(block):
     """PreToolUse: log tool calls."""
     print(f"\033[90m[HOOK] {block.name}\033[0m")
     return None
 
+
 def context_inject_hook(query: str):
     """UserPromptSubmit: log working directory."""
     print(f"\033[90m[HOOK] UserPromptSubmit: working in {WORKDIR}\033[0m")
     return None
 
+
 def summary_hook(messages: list):
     """Stop: print tool call count."""
-    tool_count = sum(1 for m in messages
-                     for b in (m.get("content") if isinstance(m.get("content"), list) else [])
-                     if isinstance(b, dict) and b.get("type") == "tool_result")
+    tool_count = sum(
+        1
+        for m in messages
+        for b in (m.get("content") if isinstance(m.get("content"), list) else [])
+        if isinstance(b, dict) and b.get("type") == "tool_result"
+    )
     print(f"\033[90m[HOOK] Stop: session used {tool_count} tool calls\033[0m")
     return None
+
 
 register_hook("UserPromptSubmit", context_inject_hook)
 register_hook("PreToolUse", permission_hook)
@@ -234,18 +143,23 @@ register_hook("Stop", summary_hook)
 
 rounds_since_todo = 0
 
+
 def agent_loop(messages: list):
     global rounds_since_todo
     while True:
         # s05: nag reminder — inject if model hasn't updated todos for 3 rounds
         if rounds_since_todo >= 3 and messages:
-            messages.append({"role": "user",
-                             "content": "<reminder>Update your todos.</reminder>"})
+            messages.append(
+                {"role": "user", "content": "<reminder>Update your todos.</reminder>"}
+            )
             rounds_since_todo = 0
 
         response = client.messages.create(
-            model=MODEL, system=SYSTEM, messages=messages,
-            tools=TOOLS, max_tokens=8000,
+            model=MODEL,
+            system=SYSTEM,
+            messages=messages,
+            tools=TOOLS,
+            max_tokens=8000,
         )
         messages.append({"role": "assistant", "content": response.content})
 
@@ -264,8 +178,13 @@ def agent_loop(messages: list):
 
             blocked = trigger_hooks("PreToolUse", block)
             if blocked:
-                results.append({"type": "tool_result", "tool_use_id": block.id,
-                                "content": str(blocked)})
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": str(blocked),
+                    }
+                )
                 continue
 
             handler = TOOL_HANDLERS.get(block.name)
@@ -277,8 +196,9 @@ def agent_loop(messages: list):
             if block.name == "todo_write":
                 rounds_since_todo = 0
 
-            results.append({"type": "tool_result", "tool_use_id": block.id,
-                            "content": output})
+            results.append(
+                {"type": "tool_result", "tool_use_id": block.id, "content": output}
+            )
 
         messages.append({"role": "user", "content": results})
 

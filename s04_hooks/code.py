@@ -48,7 +48,7 @@ Run: python s04_hooks/code.py
 Needs: pip install anthropic python-dotenv + ANTHROPIC_API_KEY in .env
 """
 
-import os, subprocess
+import os
 from pathlib import Path
 
 
