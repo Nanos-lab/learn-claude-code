@@ -1,5 +1,50 @@
 [English](./README.md) | [中文](./README-zh.md) | [日本語](./README-ja.md)
 
+> **📌 学习分支说明**：本仓库是 [shareAI-lab/learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 的个人学习分支（`my-feature`），目前已学习完成 **s01 ~ s06**。以下为与原项目的主要差异，原始 README 内容保留在分隔线之后。
+
+---
+
+## 🧬 学习分支变更摘要
+
+### 进度
+
+| 章节 | 主题 | 状态 |
+|------|------|------|
+| s01 | Agent Loop | ✅ 完成 |
+| s02 | Tool Use | ✅ 完成 |
+| s03 | Permission System | ✅ 完成 |
+| s04 | Hook System | ✅ 完成 |
+| s05 | TodoWrite | ✅ 完成 |
+| s06 | Subagent | ✅ 完成 |
+| s07 ~ s20 | 后续章节 | ⏳ 待学习 |
+
+### 主要改动
+
+#### 1. Windows 环境适配
+
+原项目面向 Unix/Linux 环境（使用 `bash` 作为默认 shell），本分支针对 **Windows (cmd.exe / PowerShell)** 做了以下适配：
+
+- **s01**：将 `bash` 工具重命名为 `run_command`，底层调用 `cmd.exe` 执行命令；危险命令黑名单替换为 Windows 对应项（如 `rmdir /s`、`del /f /s`、`format`、`reg delete` 等）
+- **s02**：`safe_path()` 显式 `resolve()` 工作目录，解决 Windows 盘符大小写不一致（`c:\` vs `C:\`）导致的路径越界判定失败；所有文件读写显式指定 `encoding="utf-8"`，避免 Windows 默认 GBK 编码导致的解码错误；`run_glob()` 将反斜杠 `\` 统一替换为正斜杠 `/`，防止 glob 将其识别为转义符
+- **s03 ~ s06**：继承上述 Windows 适配
+
+#### 2. 功能模块拆分
+
+原项目的 `code.py` 将所有逻辑（工具实现、hooks、工具定义）集中在单个文件中。从 s04 开始，本分支将不同关注点拆分到独立模块，使结构更清晰：
+
+| 章节 | 拆分结构 |
+|------|----------|
+| s01 ~ s03 | 单文件 `code.py`（与原项目一致） |
+| s04 Hooks | `code.py` + `Tools/File_Handle.py` |
+| s05 TodoWrite | `code.py` + `Tools/File_Handle.py` + `Tools/Todo_write.py` |
+| s06 Subagent | `code.py` + `Tools/File_Handle.py` + `Tools/Todo_Write.py` + `Tools/Sub_Task.py` + `Hooks/hooks.py` |
+
+拆分原则：**每种工具独立为一个模块**（`Tools/` 目录），**hooks 独立为一个模块**（`Hooks/` 目录），`code.py` 只保留 agent loop 和入口逻辑。新章节的工具可以直接复用已有模块，无需重复代码。
+
+---
+
+---
+
 <a href="https://trendshift.io/repositories/19746" target="_blank"><img src="https://trendshift.io/api/badge/repositories/19746" alt="shareAI-lab%2Flearn-claude-code | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 # Learn Claude Code -- Harness Engineering for Real Agents
