@@ -6,15 +6,15 @@
 
 ## 学习进度
 
-| 章节 | 主题 | 核心概念 | 状态 |
-|------|------|----------|------|
-| [s01](./s01_agent_loop/) | Agent Loop | `messages[]` / `while True` / `stop_reason` | ✅ 完成 |
-| [s02](./s02_tool_use/) | Tool Use | `TOOL_HANDLERS` / 分发映射 / 工具扩展 | ✅ 完成 |
-| [s03](./s03_permission/) | Permission | 三级权限管线 / 审批流程 | ✅ 完成 |
-| [s04](./s04_hooks/) | Hook System | `PreToolUse` / `PostToolUse` / 扩展点 | ✅ 完成 |
-| [s05](./s05_todo_write/) | TodoWrite | 计划先行 / nag 提醒 | ✅ 完成 |
-| [s06](./s06_subagent/) | Subagent | 干净上下文 / 结果摘要 | ✅ 完成 |
-| s07 ~ s20 | 后续章节 | — | ⏳ 待学习 |
+| 章节                     | 主题        | 核心概念                                    | 状态      |
+| ------------------------ | ----------- | ------------------------------------------- | --------- |
+| [s01](./s01_agent_loop/) | Agent Loop  | `messages[]` / `while True` / `stop_reason` | ✅ 完成   |
+| [s02](./s02_tool_use/)   | Tool Use    | `TOOL_HANDLERS` / 分发映射 / 工具扩展       | ✅ 完成   |
+| [s03](./s03_permission/) | Permission  | 三级权限管线 / 审批流程                     | ✅ 完成   |
+| [s04](./s04_hooks/)      | Hook System | `PreToolUse` / `PostToolUse` / 扩展点       | ✅ 完成   |
+| [s05](./s05_todo_write/) | TodoWrite   | 计划先行 / nag 提醒                         | ✅ 完成   |
+| [s06](./s06_subagent/)   | Subagent    | 干净上下文 / 结果摘要                       | ✅ 完成   |
+| s07 ~ s20                | 后续章节    | —                                           | ⏳ 待学习 |
 
 ## 本分支与原项目的主要差异
 
@@ -22,11 +22,11 @@
 
 原项目面向 Unix/Linux（默认使用 `bash`），本分支针对 **Windows (cmd.exe / PowerShell)** 做了适配：
 
-| 章节 | 适配内容 |
-|------|----------|
-| s01 | `bash` 重命名为 `run_command`，底层调用 `cmd.exe`；危险命令黑名单替换为 Windows 对应项（`rmdir /s`、`del /f /s`、`format`、`reg delete` 等） |
-| s02 | `safe_path()` 显式 `resolve()` 解决盘符大小写不一致（`c:\` vs `C:\`）；文件 I/O 显式 `encoding="utf-8"` 避免 GBK 乱码；`glob` 反斜杠转正斜杠 |
-| s03~s06 | 继承上述全部适配 |
+| 章节    | 适配内容                                                                                                                                     |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| s01     | `bash` 重命名为 `run_command`，底层调用 `cmd.exe`；危险命令黑名单替换为 Windows 对应项（`rmdir /s`、`del /f /s`、`format`、`reg delete` 等） |
+| s02     | `safe_path()` 显式 `resolve()` 解决盘符大小写不一致（`c:\` vs `C:\`）；文件 I/O 显式 `encoding="utf-8"` 避免 GBK 乱码；`glob` 反斜杠转正斜杠 |
+| s03~s06 | 继承上述全部适配                                                                                                                             |
 
 ### 2. 功能模块拆分
 
@@ -38,9 +38,9 @@ s04_hooks/                    s05_todo_write/               s06_subagent/
 └── Tools/                   ├── Tools/                   ├── Tools/
     └── File_Handle.py           ├── File_Handle.py           ├── File_Handle.py
                                  └── Todo_write.py            ├── Todo_Write.py
-                                                              ├── Sub_Task.py
-                                                              └── Hooks/
-                                                                  └── hooks.py
+                                                              └── Sub_Task.py
+                                                          ├── Hooks/
+                                                              └── hooks.py
 ```
 
 拆分原则：**每种工具独立为一个模块**（`Tools/`），**hooks 独立为一个模块**（`Hooks/`），`code.py` 只保留 agent loop 和入口逻辑。后续章节可直接复用，无需重复代码。
@@ -124,45 +124,45 @@ def agent_loop(messages):
 
 ## 20 课概览
 
-> **s01** *"一个循环 + Bash 就足够"* — 一个工具 + 一个循环 = 一个 Agent
+> **s01** _"一个循环 + Bash 就足够"_ — 一个工具 + 一个循环 = 一个 Agent
 >
-> **s02** *"加一个工具就是加一个处理器"* — 循环不动，新工具注册到分发表
+> **s02** _"加一个工具就是加一个处理器"_ — 循环不动，新工具注册到分发表
 >
-> **s03** *"先设边界，再给自由"* — 检查什么能跑、什么必须停、什么需要审批
+> **s03** _"先设边界，再给自由"_ — 检查什么能跑、什么必须停、什么需要审批
 >
-> **s04** *"Hook 在循环周围，永远不改循环"* — 不改变主循环，添加扩展点
+> **s04** _"Hook 在循环周围，永远不改循环"_ — 不改变主循环，添加扩展点
 >
-> **s05** *"没有计划的 Agent 会迷失"* — 先列步骤再执行，完成率翻倍
+> **s05** _"没有计划的 Agent 会迷失"_ — 先列步骤再执行，完成率翻倍
 >
-> **s06** *"大事化小，每个子任务有干净上下文"* — Subagent 做副线工作，只带回结果
+> **s06** _"大事化小，每个子任务有干净上下文"_ — Subagent 做副线工作，只带回结果
 >
-> **s07** *"知识按需加载，不预先塞入"* — 先列出 Skill，展开时才加载
+> **s07** _"知识按需加载，不预先塞入"_ — 先列出 Skill，展开时才加载
 >
-> **s08** *"上下文总会满 — 要有腾空间的办法"* — 多层压缩策略换无限会话
+> **s08** _"上下文总会满 — 要有腾空间的办法"_ — 多层压缩策略换无限会话
 >
-> **s09** *"记住重要的，忘记不重要的"* — 三个子系统：筛选、提取、固化
+> **s09** _"记住重要的，忘记不重要的"_ — 三个子系统：筛选、提取、固化
 >
-> **s10** *"提示词运行时组装，不硬编码"* — 按节拼接，按需加载
+> **s10** _"提示词运行时组装，不硬编码"_ — 按节拼接，按需加载
 >
-> **s11** *"错误不是终点，是重试的起点"* — 重试、腾空间、换路径
+> **s11** _"错误不是终点，是重试的起点"_ — 重试、腾空间、换路径
 >
-> **s12** *"大目标拆小任务，排序，落盘"* — 文件持久化的任务图，为多 Agent 协作打基础
+> **s12** _"大目标拆小任务，排序，落盘"_ — 文件持久化的任务图，为多 Agent 协作打基础
 >
-> **s13** *"慢操作去后台，Agent 继续思考"* — 后台线程执行命令，完成时通知注入
+> **s13** _"慢操作去后台，Agent 继续思考"_ — 后台线程执行命令，完成时通知注入
 >
-> **s14** *"按计划触发，不需要人来踢"* — 按时间自动触发任务
+> **s14** _"按计划触发，不需要人来踢"_ — 按时间自动触发任务
 >
-> **s15** *"一个人搞不定 — 分配给队友"* — 常驻队友 + 异步邮箱
+> **s15** _"一个人搞不定 — 分配给队友"_ — 常驻队友 + 异步邮箱
 >
-> **s16** *"队友需要共享的通信规则"* — 用固定的请求-响应格式协调
+> **s16** _"队友需要共享的通信规则"_ — 用固定的请求-响应格式协调
 >
-> **s17** *"队友自己看板、自己接任务"* — 不需要 Leader 逐一分配，自组织
+> **s17** _"队友自己看板、自己接任务"_ — 不需要 Leader 逐一分配，自组织
 >
-> **s18** *"各干各的目录，互不干扰"* — 任务有目标，Worktree 有目录，按 ID 绑定
+> **s18** _"各干各的目录，互不干扰"_ — 任务有目标，Worktree 有目录，按 ID 绑定
 >
-> **s19** *"能力不够？通过 MCP 外挂"* — 外部工具接入同一个工具池
+> **s19** _"能力不够？通过 MCP 外挂"_ — 外部工具接入同一个工具池
 >
-> **s20** *"多种机制，一个循环"* — 所有机制回归一个完整的 Harness
+> **s20** _"多种机制，一个循环"_ — 所有机制回归一个完整的 Harness
 
 ---
 
@@ -210,28 +210,28 @@ flowchart TD
 
 ## 所有章节
 
-| 章节 | 主题 | 核心概念 |
-|------|------|----------|
-| [s01](./s01_agent_loop/) | Agent Loop | `messages[]` / `while True` / `stop_reason` |
-| [s02](./s02_tool_use/) | Tool Use | `TOOL_HANDLERS` / 分发映射 / 工具扩展 |
-| [s03](./s03_permission/) | Permission | 三级权限管线 / 审批流程 |
-| [s04](./s04_hooks/) | Hook System | `PreToolUse` / `PostToolUse` / 扩展点 |
-| [s05](./s05_todo_write/) | TodoWrite | 计划先行 / nag 提醒 |
-| [s06](./s06_subagent/) | Subagent | 干净上下文 / 结果摘要 |
-| [s07](./s07_skill_loading/) | Skill Loading | `SkillManifest` / 按需注入 |
-| [s08](./s08_context_compact/) | Context Compact | snipCompact / microCompact / AutoCompact |
-| [s09](./s09_memory/) | Memory | 筛选 / 提取 / 固化 |
-| [s10](./s10_system_prompt/) | System Prompt | 运行时组装 / 按节拼接 |
-| [s11](./s11_error_recovery/) | Error Recovery | Token 升级 / 降级模型 / 重试策略 |
-| [s12](./s12_task_system/) | Task System | `TaskRecord` / `blockedBy` / 磁盘持久化 |
-| [s13](./s13_background_tasks/) | Background Tasks | 线程执行 / 通知注入 |
-| [s14](./s14_cron_scheduler/) | Cron Scheduler | 定时调度 / 会话级触发器 |
-| [s15](./s15_agent_teams/) | Agent Teams | `MessageBus` / 收件箱 |
-| [s16](./s16_team_protocols/) | Team Protocols | 关闭握手 / 计划审批 |
-| [s17](./s17_autonomous_agents/) | Autonomous Agents | 空闲循环 / 自动接单 / 自组织 |
-| [s18](./s18_worktree_isolation/) | Worktree Isolation | `WorktreeRecord` / 任务-目录绑定 |
-| [s19](./s19_mcp_plugin/) | MCP Plugin | 多传输 / 通道路由 / 工具池组装 |
-| [s20](./s20_comprehensive/) | Comprehensive | 所有机制围绕一个循环 |
+| 章节                             | 主题               | 核心概念                                    |
+| -------------------------------- | ------------------ | ------------------------------------------- |
+| [s01](./s01_agent_loop/)         | Agent Loop         | `messages[]` / `while True` / `stop_reason` |
+| [s02](./s02_tool_use/)           | Tool Use           | `TOOL_HANDLERS` / 分发映射 / 工具扩展       |
+| [s03](./s03_permission/)         | Permission         | 三级权限管线 / 审批流程                     |
+| [s04](./s04_hooks/)              | Hook System        | `PreToolUse` / `PostToolUse` / 扩展点       |
+| [s05](./s05_todo_write/)         | TodoWrite          | 计划先行 / nag 提醒                         |
+| [s06](./s06_subagent/)           | Subagent           | 干净上下文 / 结果摘要                       |
+| [s07](./s07_skill_loading/)      | Skill Loading      | `SkillManifest` / 按需注入                  |
+| [s08](./s08_context_compact/)    | Context Compact    | snipCompact / microCompact / AutoCompact    |
+| [s09](./s09_memory/)             | Memory             | 筛选 / 提取 / 固化                          |
+| [s10](./s10_system_prompt/)      | System Prompt      | 运行时组装 / 按节拼接                       |
+| [s11](./s11_error_recovery/)     | Error Recovery     | Token 升级 / 降级模型 / 重试策略            |
+| [s12](./s12_task_system/)        | Task System        | `TaskRecord` / `blockedBy` / 磁盘持久化     |
+| [s13](./s13_background_tasks/)   | Background Tasks   | 线程执行 / 通知注入                         |
+| [s14](./s14_cron_scheduler/)     | Cron Scheduler     | 定时调度 / 会话级触发器                     |
+| [s15](./s15_agent_teams/)        | Agent Teams        | `MessageBus` / 收件箱                       |
+| [s16](./s16_team_protocols/)     | Team Protocols     | 关闭握手 / 计划审批                         |
+| [s17](./s17_autonomous_agents/)  | Autonomous Agents  | 空闲循环 / 自动接单 / 自组织                |
+| [s18](./s18_worktree_isolation/) | Worktree Isolation | `WorktreeRecord` / 任务-目录绑定            |
+| [s19](./s19_mcp_plugin/)         | MCP Plugin         | 多传输 / 通道路由 / 工具池组装              |
+| [s20](./s20_comprehensive/)      | Comprehensive      | 所有机制围绕一个循环                        |
 
 ---
 
