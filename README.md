@@ -1,181 +1,97 @@
-[English](./README.md) | [中文](./README-zh.md) | [日本語](./README-ja.md)
+# Learn Claude Code — Harness 工程实践
 
-> **📌 学习分支说明**：本仓库是 [shareAI-lab/learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 的个人学习分支（`my-feature`），目前已学习完成 **s01 ~ s06**。以下为与原项目的主要差异，原始 README 内容保留在分隔线之后。
+> 📌 **学习分支**：本仓库是 [shareAI-lab/learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 的个人学习分支（`my-feature`），用于逐章学习 Agent Harness 的工程实现。目前已学完 **s01 ~ s06**。
 
 ---
 
-## 🧬 学习分支变更摘要
+## 学习进度
 
-### 进度
+| 章节 | 主题 | 核心概念 | 状态 |
+|------|------|----------|------|
+| [s01](./s01_agent_loop/) | Agent Loop | `messages[]` / `while True` / `stop_reason` | ✅ 完成 |
+| [s02](./s02_tool_use/) | Tool Use | `TOOL_HANDLERS` / 分发映射 / 工具扩展 | ✅ 完成 |
+| [s03](./s03_permission/) | Permission | 三级权限管线 / 审批流程 | ✅ 完成 |
+| [s04](./s04_hooks/) | Hook System | `PreToolUse` / `PostToolUse` / 扩展点 | ✅ 完成 |
+| [s05](./s05_todo_write/) | TodoWrite | 计划先行 / nag 提醒 | ✅ 完成 |
+| [s06](./s06_subagent/) | Subagent | 干净上下文 / 结果摘要 | ✅ 完成 |
+| s07 ~ s20 | 后续章节 | — | ⏳ 待学习 |
 
-| 章节 | 主题 | 状态 |
-|------|------|------|
-| s01 | Agent Loop | ✅ 完成 |
-| s02 | Tool Use | ✅ 完成 |
-| s03 | Permission System | ✅ 完成 |
-| s04 | Hook System | ✅ 完成 |
-| s05 | TodoWrite | ✅ 完成 |
-| s06 | Subagent | ✅ 完成 |
-| s07 ~ s20 | 后续章节 | ⏳ 待学习 |
+## 本分支与原项目的主要差异
 
-### 主要改动
+### 1. Windows 环境适配
 
-#### 1. Windows 环境适配
+原项目面向 Unix/Linux（默认使用 `bash`），本分支针对 **Windows (cmd.exe / PowerShell)** 做了适配：
 
-原项目面向 Unix/Linux 环境（使用 `bash` 作为默认 shell），本分支针对 **Windows (cmd.exe / PowerShell)** 做了以下适配：
-
-- **s01**：将 `bash` 工具重命名为 `run_command`，底层调用 `cmd.exe` 执行命令；危险命令黑名单替换为 Windows 对应项（如 `rmdir /s`、`del /f /s`、`format`、`reg delete` 等）
-- **s02**：`safe_path()` 显式 `resolve()` 工作目录，解决 Windows 盘符大小写不一致（`c:\` vs `C:\`）导致的路径越界判定失败；所有文件读写显式指定 `encoding="utf-8"`，避免 Windows 默认 GBK 编码导致的解码错误；`run_glob()` 将反斜杠 `\` 统一替换为正斜杠 `/`，防止 glob 将其识别为转义符
-- **s03 ~ s06**：继承上述 Windows 适配
-
-#### 2. 功能模块拆分
-
-原项目的 `code.py` 将所有逻辑（工具实现、hooks、工具定义）集中在单个文件中。从 s04 开始，本分支将不同关注点拆分到独立模块，使结构更清晰：
-
-| 章节 | 拆分结构 |
+| 章节 | 适配内容 |
 |------|----------|
-| s01 ~ s03 | 单文件 `code.py`（与原项目一致） |
-| s04 Hooks | `code.py` + `Tools/File_Handle.py` |
-| s05 TodoWrite | `code.py` + `Tools/File_Handle.py` + `Tools/Todo_write.py` |
-| s06 Subagent | `code.py` + `Tools/File_Handle.py` + `Tools/Todo_Write.py` + `Tools/Sub_Task.py` + `Hooks/hooks.py` |
+| s01 | `bash` 重命名为 `run_command`，底层调用 `cmd.exe`；危险命令黑名单替换为 Windows 对应项（`rmdir /s`、`del /f /s`、`format`、`reg delete` 等） |
+| s02 | `safe_path()` 显式 `resolve()` 解决盘符大小写不一致（`c:\` vs `C:\`）；文件 I/O 显式 `encoding="utf-8"` 避免 GBK 乱码；`glob` 反斜杠转正斜杠 |
+| s03~s06 | 继承上述全部适配 |
 
-拆分原则：**每种工具独立为一个模块**（`Tools/` 目录），**hooks 独立为一个模块**（`Hooks/` 目录），`code.py` 只保留 agent loop 和入口逻辑。新章节的工具可以直接复用已有模块，无需重复代码。
+### 2. 功能模块拆分
+
+原项目 `code.py` 将所有逻辑集中在单文件中。从 s04 开始，本分支将不同关注点拆到独立模块：
+
+```
+s04_hooks/                    s05_todo_write/               s06_subagent/
+├── code.py     # 主循环     ├── code.py     # 主循环     ├── code.py      # 主循环
+└── Tools/                   ├── Tools/                   ├── Tools/
+    └── File_Handle.py           ├── File_Handle.py           ├── File_Handle.py
+                                 └── Todo_write.py            ├── Todo_Write.py
+                                                              ├── Sub_Task.py
+                                                              └── Hooks/
+                                                                  └── hooks.py
+```
+
+拆分原则：**每种工具独立为一个模块**（`Tools/`），**hooks 独立为一个模块**（`Hooks/`），`code.py` 只保留 agent loop 和入口逻辑。后续章节可直接复用，无需重复代码。
 
 ---
 
----
+## 核心思想：Agency 来自模型，Agent = 模型 + Harness
 
-<a href="https://trendshift.io/repositories/19746" target="_blank"><img src="https://trendshift.io/api/badge/repositories/19746" alt="shareAI-lab%2Flearn-claude-code | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+**Agency — 感知、推理、行动的能力 — 来自模型训练，而非外部代码编排。** 但一个可工作的 Agent 产品需要模型和 Harness 两者兼备。模型是驾驶员，Harness 是载具。本仓库教你如何造车。
 
-# Learn Claude Code -- Harness Engineering for Real Agents
+### 什么是 Harness
 
-## Agency Comes from the Model. An Agent Product = Model + Harness.
-
-Before we write any code, one thing needs to be clear.
-
-**Agency -- the capacity to perceive, reason, and act -- comes from model training, not from external code orchestration.** But a working agent product needs both the model and the harness. The model is the driver. The harness is the vehicle. This repository teaches you how to build the vehicle.
-
-### Where Agency Comes From
-
-At the core of every agent is a neural network -- a Transformer, an RNN, a trained function -- shaped by billions of gradient updates on sequences of perception, reasoning, and action. Agency was never bestowed by the surrounding code. It was learned during training.
-
-Humans are the original proof. A biological neural network, refined by millions of years of evolutionary pressure, perceives the world through senses, reasons through a brain, and acts through a body. When DeepMind, OpenAI, or Anthropic say "agent," they all mean the same core thing: **a model that learned to act through training, plus the infrastructure that lets it operate in a specific environment.**
-
-The historical record is unambiguous:
-
-- **2013 -- DeepMind DQN plays Atari.** A single neural network, receiving only raw pixels and game scores, learned 7 Atari 2600 games -- surpassing prior algorithms and beating human experts in 3 of them. By 2015, scaled to [49 games at professional tester level](https://www.nature.com/articles/nature14236), published in *Nature*. No game-specific rules. One model, learning from experience.
-
-- **2019 -- OpenAI Five conquers Dota 2.** Five neural networks played [45,000 years of Dota 2 against themselves](https://openai.com/index/openai-five-defeats-dota-2-world-champions/) over 10 months, then defeated **OG** -- the TI8 world champions -- 2-0 in a live match. In the public arena, the AI won 99.4% of 42,729 games. No scripted strategies. Models learned teamwork through self-play.
-
-- **2019 -- DeepMind AlphaStar masters StarCraft II.** AlphaStar [beat a professional player 10-1](https://deepmind.google/blog/alphastar-mastering-the-real-time-strategy-game-starcraft-ii/) in closed matches, then reached [Grandmaster rank](https://www.nature.com/articles/d41586-019-03298-6) on the European server -- top 0.15% of 90,000 players. An incomplete-information, real-time game with a combinatorial action space far exceeding chess or Go.
-
-- **2019 -- Tencent Jueyu dominates Honor of Kings.** Tencent AI Lab's "Jueyu" system [defeated KPL professional players in full 5v5](https://www.jiemian.com/article/3371171.html) at the World Champion Cup semifinal. In 1v1 mode, pros [won just 1 out of 15 matches, lasting under 8 minutes at best](https://developer.aliyun.com/article/851058). Training intensity: one day equaled 440 human years. A model that learned the entire game from scratch through self-play.
-
-- **2024-2025 -- LLM agents reshape software engineering.** Claude, GPT, Gemini -- large language models trained on the full breadth of human code and reasoning -- are deployed as coding agents. They read codebases, write implementations, debug failures, and coordinate as teams. The architecture is identical to every previous agent: a trained model, placed in an environment, given tools for perception and action.
-
-Every milestone points to the same fact: **Agency -- the ability to perceive, reason, and act -- is trained, not coded.** But every agent also needs an environment to operate in: an Atari emulator, the Dota 2 client, the StarCraft II engine, an IDE and a terminal. The model supplies the intelligence. The environment supplies the action space. Together they form a complete agent.
-
-### What an Agent Is NOT
-
-The word "agent" has been hijacked by an entire prompt-plumbing industry.
-
-Drag-and-drop workflow builders. No-code "AI Agent" platforms. Prompt-chain orchestration libraries. They share a single delusion: that stringing LLM API calls together with if-else branches, node graphs, and hardcoded routing logic constitutes "building an agent."
-
-It does not. What they produce are Rube Goldberg machines -- over-engineered, brittle, procedural rule pipelines with an LLM wedged in as a glorified text-completion node. That is not an agent. That is a shell script with grandiose pretensions.
-
-You cannot brute-force intelligence by stacking procedural logic -- sprawling rule trees, node graphs, chained prompt waterfalls -- and praying that enough glue code will spontaneously produce autonomous behavior. It will not. You cannot engineer agency into existence. Agency is learned, not coded.
-
-### The Mindshift: From "Building Agents" to Building Harnesses
-
-When someone says "I am building an agent," they can only mean one of two things:
-
-**1. Training a model.** Adjusting weights through reinforcement learning, fine-tuning, RLHF, or another gradient-based method. Collecting trajectory data -- real-world sequences of perception, reasoning, and action in a target domain -- and using it to shape the model's behavior. This is what DeepMind, OpenAI, Tencent AI Lab, and Anthropic do.
-
-**2. Building a harness.** Writing the code that gives a model an operational environment. This is what most of us do, and it is the core of this repository.
-
-A harness is everything an agent needs to work in a specific domain:
+Harness 是模型在特定领域中运行所需的一切：
 
 ```
-Harness = Tools + Knowledge + Observation + Action Interfaces + Permissions
+Harness = 工具 + 知识 + 观察 + 行动接口 + 权限
 
-    Tools:          file I/O, shell, network, database, browser
-    Knowledge:      product docs, domain references, API specs, style guides
-    Observation:    git diff, error logs, browser state, sensor data
-    Action:         CLI commands, API calls, UI interactions
-    Permissions:    sandbox isolation, approval workflows, trust boundaries
+    工具(Tools)：      文件读写、Shell、网络、数据库、浏览器
+    知识(Knowledge)：   产品文档、领域参考、API 规范、风格指南
+    观察(Observation)： git diff、错误日志、浏览器状态、传感器数据
+    行动(Action)：      CLI 命令、API 调用、UI 交互
+    权限(Permissions)： 沙箱隔离、审批流程、信任边界
 ```
 
-The model decides. The harness executes. The model reasons. The harness provides context. The model is the driver. The harness is the vehicle.
+模型做决策，Harness 做执行。模型做推理，Harness 提供上下文。
 
-This repository teaches you to build the vehicle. A vehicle for coding. But the design patterns generalize to any domain.
+### Harness 工程师做什么
 
-### What Harness Engineers Actually Do
+- **实现工具** — 给 Agent 双手。文件读写、Shell 执行、API 调用、浏览器控制
+- **管理知识** — 给 Agent 领域专长。按需加载，不预先塞入
+- **管理上下文** — 给 Agent 干净的记忆。Subagent 隔离噪音，Context Compact 防止历史淹没当下
+- **控制权限** — 给 Agent 边界。沙箱文件访问，破坏性操作需审批
+- **收集轨迹数据** — Agent 的每一次行动序列都是训练信号，是微调下一代模型的原材料
 
-If you are reading this repository, you are most likely a harness engineer. Here is what the job actually entails:
-
-- **Implement tools.** Give the agent hands. File read/write, shell execution, API calls, browser control, database queries. Each tool is one action the agent can take in its environment. Design them atomic, composable, and clearly described.
-
-- **Curate knowledge.** Give the agent domain expertise. Product documentation, architecture decision records, style guides, compliance requirements. Load on demand, not upfront.
-
-- **Manage context.** Give the agent clean memory. Subagent isolation prevents noise leakage. Context compaction prevents history from drowning the present. Task systems let goals persist beyond a single conversation.
-
-- **Control permissions.** Give the agent boundaries. Sandbox file access. Require approval for destructive operations. Enforce trust boundaries between the agent and external systems.
-
-- **Collect trajectory data.** Every action sequence the agent executes in your harness is training signal. Real deployment trajectories are the raw material for fine-tuning the next generation of agent models.
-
-You are not writing intelligence. You are building the world that intelligence inhabits. The quality of that world directly determines how effectively the intelligence can express itself.
-
-**Build the harness well. The model will do the rest.**
-
-### Why Claude Code
-
-Because Claude Code is the most elegant, most complete agent harness implementation we have seen. Not because of any clever trick, but because of what it *does not* do: it does not try to be the agent. It does not impose rigid workflows. It does not substitute hand-crafted decision trees for the model's own judgment. It gives the model tools, knowledge, context management, and permission boundaries -- then gets out of the way.
-
-Strip Claude Code down to its essence:
-
-```
-Claude Code = one agent loop
-            + tools (bash, read, write, edit, glob, grep, browser...)
-            + on-demand skill loading
-            + context compaction
-            + subagent spawning
-            + task system with dependency graphs
-            + async mailbox team coordination
-            + worktree-isolated parallel execution
-            + permission governance
-            + hooks extension system
-            + memory persistence
-            + MCP external capability routing
-```
-
-That is it. The agent itself? Claude. A model. Trained by Anthropic on the full breadth of human reasoning and code. The harness did not make Claude smart. Claude was already smart. The harness gave Claude hands, eyes, and a workspace.
-
-The takeaway is not "copy Claude Code." The takeaway is: **the best agent products come from engineers who understand that their job is the harness, not the intelligence.**
+你不是在写智能，你是在构建智能栖居的世界。把 Harness 造好，剩下的交给模型。
 
 ---
 
+## 核心模式：Agent Loop
+
 ```
-                    THE AGENT PATTERN
-                    =================
-
-    User --> messages[] --> LLM --> response
-                                      |
-                            stop_reason == "tool_use"?
-                           /                          \
-                         yes                           no
-                          |                             |
-                    execute tools                    return text
-                    append results
-                    loop back -----------------> messages[]
-
-
-    The model decides when to call tools and when to stop.
-    The code just executes what the model asks for.
-    This repo teaches you to build everything around this loop --
-    the harness that makes the agent effective in a specific domain.
+用户 --> messages[] --> LLM --> response
+                                  |
+                        stop_reason == "tool_use"?
+                       /                          \
+                    是                            否
+                     |                             |
+              执行工具                          返回文本
+              追加结果
+              回到 messages[]
 ```
-
-## Core Pattern
 
 ```python
 def agent_loop(messages):
@@ -202,306 +118,204 @@ def agent_loop(messages):
         messages.append({"role": "user", "content": results})
 ```
 
-Every lesson layers one harness mechanism on top of this loop -- the loop itself never changes. The loop belongs to the agent. The mechanisms belong to the harness.
-
-The loop is constant. Tools, knowledge, and permissions change. Agent = Model (LLM) + a generalized operational environment (Harness).
+每一课在这个循环之上叠加一种 Harness 机制 — **循环本身从不改变**。
 
 ---
 
-## Version Status
+## 20 课概览
 
-This repository currently contains two tutorial tracks:
-
-- **Current track: root-level `s01-s20`**
-  The root-level `s01_*` ... `s20_*` folders are the new canonical version. Each chapter contains a full narrative README, translations, runnable `code.py`, and diagrams where needed.
-- **Legacy transition track: `docs/`, `agents/`, and the current `web/` app**
-  These still preserve the older 12-lesson version. They are kept temporarily for existing readers, old links, and the web platform while the new 20-lesson track settles.
-
-If you are starting now, read the root-level `s01_agent_loop/` through `s20_comprehensive/` chapters. If you are following an older link or using the current web app, you are likely reading the legacy 12-lesson track. The legacy and current chapter numbers do not always match, so avoid mixing chapter numbers across tracks.
-
-### Legacy-to-Current Mapping
-
-| Legacy 12-lesson track | Current 20-lesson track | Topic |
-|---|---|---|
-| old s01 | new s01 | Agent Loop |
-| old s02 | new s02 | Tool Use |
-| old s03 | new s05 | TodoWrite |
-| old s04 | new s06 | Subagent |
-| old s05 | new s07 | Skill Loading |
-| old s06 | new s08 | Context Compact |
-| old s07 | new s12 | Task System |
-| old s08 | new s13 | Background Tasks |
-| old s09 | new s15 | Agent Teams |
-| old s10 | new s16 | Team Protocols |
-| old s11 | new s17 | Autonomous Agents |
-| old s12 | new s18 | Worktree Isolation |
-| new only | s03, s04, s09, s10, s11, s14, s19, s20 | Permission, Hooks, Memory, System Prompt, Error Recovery, Cron, MCP, Comprehensive Agent |
-
----
-
-## Scope
-
-This repository is a 0-to-1 harness engineering learning project: it teaches how to build the working environment around an agent model. To keep the learning path clear, some production mechanisms are intentionally simplified or omitted:
-
-- Full event / hook bus behavior, such as `PreToolUse`, `SessionStart/End`, and `ConfigChange`.
-  The teaching code uses minimal lifecycle events where needed.
-- Rule-based permission governance and full trust workflows.
-- Session lifecycle controls such as resume/fork, plus more complete worktree lifecycle handling.
-- Full MCP runtime details such as transport, OAuth, resource subscription, and polling.
-
-The JSONL mailbox protocol in this repository is a teaching implementation, not a claim about any specific production internal implementation.
-
----
-
-## 20 Progressive Lessons
-
-**Each lesson adds one harness mechanism. Each mechanism has a motto.**
-
-> **s01** &nbsp; *"One loop & Bash is all you need"* &mdash; one tool + one loop = one agent
+> **s01** *"一个循环 + Bash 就足够"* — 一个工具 + 一个循环 = 一个 Agent
 >
-> **s02** &nbsp; *"Adding a tool means adding one handler"* &mdash; the loop stays untouched; new tools register into the dispatch map
+> **s02** *"加一个工具就是加一个处理器"* — 循环不动，新工具注册到分发表
 >
-> **s03** &nbsp; *"Set boundaries first, then grant freedom"* &mdash; check what can run, what must stop, and what needs approval
+> **s03** *"先设边界，再给自由"* — 检查什么能跑、什么必须停、什么需要审批
 >
-> **s04** &nbsp; *"Hook around the loop, never rewrite the loop"* &mdash; add extension points without changing the main loop
+> **s04** *"Hook 在循环周围，永远不改循环"* — 不改变主循环，添加扩展点
 >
-> **s05** &nbsp; *"An agent without a plan drifts"* &mdash; list the steps before starting; completion rate doubles
+> **s05** *"没有计划的 Agent 会迷失"* — 先列步骤再执行，完成率翻倍
 >
-> **s06** &nbsp; *"Big tasks split small, each subtask gets clean context"* &mdash; subagents do the side work and bring back only the result
+> **s06** *"大事化小，每个子任务有干净上下文"* — Subagent 做副线工作，只带回结果
 >
-> **s07** &nbsp; *"Load knowledge on demand, not upfront"* &mdash; list skills first, expand them only when needed
+> **s07** *"知识按需加载，不预先塞入"* — 先列出 Skill，展开时才加载
 >
-> **s08** &nbsp; *"Context always fills up -- have a way to make room"* &mdash; multi-layer compaction strategies buy you infinite sessions
+> **s08** *"上下文总会满 — 要有腾空间的办法"* — 多层压缩策略换无限会话
 >
-> **s09** &nbsp; *"Remember what matters, forget what doesn't"* &mdash; three subsystems: selection, extraction, consolidation
+> **s09** *"记住重要的，忘记不重要的"* — 三个子系统：筛选、提取、固化
 >
-> **s10** &nbsp; *"Prompts are assembled at runtime, not hardcoded"* &mdash; section-based concatenation, loaded on demand
+> **s10** *"提示词运行时组装，不硬编码"* — 按节拼接，按需加载
 >
-> **s11** &nbsp; *"Errors aren't the end, they're the start of a retry"* &mdash; retry, make room, or take another path when things fail
+> **s11** *"错误不是终点，是重试的起点"* — 重试、腾空间、换路径
 >
-> **s12** &nbsp; *"Big goals break into small tasks, ordered, persisted to disk"* &mdash; a file-backed task graph that lays the groundwork for multi-agent coordination
+> **s12** *"大目标拆小任务，排序，落盘"* — 文件持久化的任务图，为多 Agent 协作打基础
 >
-> **s13** &nbsp; *"Slow ops go background, agent keeps thinking"* &mdash; background threads run commands; notifications inject on completion
+> **s13** *"慢操作去后台，Agent 继续思考"* — 后台线程执行命令，完成时通知注入
 >
-> **s14** &nbsp; *"Fire on schedule, no human kick needed"* &mdash; trigger tasks automatically by time
+> **s14** *"按计划触发，不需要人来踢"* — 按时间自动触发任务
 >
-> **s15** &nbsp; *"Too big for one agent -- delegate to teammates"* &mdash; persistent teammates + async mailboxes
+> **s15** *"一个人搞不定 — 分配给队友"* — 常驻队友 + 异步邮箱
 >
-> **s16** &nbsp; *"Teammates need shared communication rules"* &mdash; use a fixed request-reply format for coordination
+> **s16** *"队友需要共享的通信规则"* — 用固定的请求-响应格式协调
 >
-> **s17** &nbsp; *"Teammates check the board, claim work themselves"* &mdash; no leader assigning one by one; self-organizing
+> **s17** *"队友自己看板、自己接任务"* — 不需要 Leader 逐一分配，自组织
 >
-> **s18** &nbsp; *"Each works in its own directory, no interference"* &mdash; tasks own goals, worktrees own directories, bound by ID
+> **s18** *"各干各的目录，互不干扰"* — 任务有目标，Worktree 有目录，按 ID 绑定
 >
-> **s19** &nbsp; *"Not enough capability? Plug in more via MCP"* &mdash; connect external tools into the same tool pool
+> **s19** *"能力不够？通过 MCP 外挂"* — 外部工具接入同一个工具池
 >
-> **s20** &nbsp; *"Many mechanisms, one loop"* &mdash; all previous mechanisms return to one complete harness
+> **s20** *"多种机制，一个循环"* — 所有机制回归一个完整的 Harness
 
 ---
 
-## Learning Path
+## 学习路线
 
-Main line: act → handle complex work → remember and recover → run long tasks → collaborate → extend and assemble.
+主线：行动 → 处理复杂工作 → 记忆与恢复 → 跑长任务 → 多 Agent 协作 → 扩展与集成。
 
 ```mermaid
 flowchart TD
-    %% Card styles
-    classDef stage1 fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#0D47A1,rx:12,ry:12,text-align:left
-    classDef stage2 fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#1B5E20,rx:12,ry:12,text-align:left
-    classDef stage3 fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#E65100,rx:12,ry:12,text-align:left
-    classDef stage4 fill:#FCE4EC,stroke:#C2185b,stroke-width:2px,color:#880E4F,rx:12,ry:12,text-align:left
-    classDef stage5 fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#4A148C,rx:12,ry:12,text-align:left
-    classDef stage6 fill:#E0F7FA,stroke:#0097A7,stroke-width:2px,color:#006064,rx:12,ry:12,text-align:left
+    classDef stage1 fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#0D47A1,rx:12,ry:12
+    classDef stage2 fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#1B5E20,rx:12,ry:12
+    classDef stage3 fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#E65100,rx:12,ry:12
+    classDef stage4 fill:#FCE4EC,stroke:#C2185b,stroke-width:2px,color:#880E4F,rx:12,ry:12
+    classDef stage5 fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#4A148C,rx:12,ry:12
+    classDef stage6 fill:#E0F7FA,stroke:#0097A7,stroke-width:2px,color:#006064,rx:12,ry:12
+    classDef groupBox fill:#F8F9FA,stroke:#CED4DA,stroke-width:2px,stroke-dasharray:5 5,rx:15,ry:15,color:#495057
 
-    %% Group style
-    classDef groupBox fill:#F8F9FA,stroke:#CED4DA,stroke-width:2px,stroke-dasharray: 5 5,rx:15,ry:15,color:#495057
-
-    %% Layer 1: stages 1-3
-    subgraph Phase1 ["🌱 Stages 1-3: Core capabilities (simple to complex)"]
+    subgraph Phase1 ["🌱 阶段 1-3：核心能力"]
         direction LR
-        S1["<b>1. Let the Agent act</b><br/>━━━━━━━━━━━━━<br/><b>s01 Agent Loop</b><br/>└─ one loop + bash<br/><br/><b>s02 Tool Use</b><br/>└─ one tool to many tools<br/><br/><b>s03 Permission</b><br/>└─ decide what can run<br/><br/><b>s04 Hooks</b><br/>└─ extension points around tools"]:::stage1
+        S1["<b>1. 让 Agent 行动</b><br/>━━━━━━━━━━━━━<br/><b>s01 Agent Loop</b><br/>└─ 一个循环 + Bash<br/><br/><b>s02 Tool Use</b><br/>└─ 从一个工具到多个工具<br/><br/><b>s03 Permission</b><br/>└─ 决定什么能跑<br/><br/><b>s04 Hooks</b><br/>└─ 工具周围的扩展点"]:::stage1
 
-        S2["<b>2. Handle complex work</b><br/>━━━━━━━━━━━━━<br/><b>s05 TodoWrite</b><br/>└─ plan first, then execute<br/><br/><b>s06 Subagent</b><br/>└─ side work, result back<br/><br/><b>s08 Context Compact</b><br/>└─ make room in long context"]:::stage2
+        S2["<b>2. 处理复杂工作</b><br/>━━━━━━━━━━━━━<br/><b>s05 TodoWrite</b><br/>└─ 先计划，再执行<br/><br/><b>s06 Subagent</b><br/>└─ 副线工作，只带回结果<br/><br/><b>s08 Context Compact</b><br/>└─ 在长上下文中腾空间"]:::stage2
 
-        S3["<b>3. Remember and recover</b><br/>━━━━━━━━━━━━━<br/><b>s09 Memory</b><br/>└─ remember what matters<br/><br/><b>s10 System Prompt</b><br/>└─ assemble at runtime<br/><br/><b>s11 Error Recovery</b><br/>└─ retry or change path"]:::stage3
+        S3["<b>3. 记忆与恢复</b><br/>━━━━━━━━━━━━━<br/><b>s09 Memory</b><br/>└─ 记住重要的<br/><br/><b>s10 System Prompt</b><br/>└─ 运行时组装<br/><br/><b>s11 Error Recovery</b><br/>└─ 重试或换路"]:::stage3
 
         S1 ==> S2 ==> S3
     end
 
-    %% Layer 2: stages 4-6
-    subgraph Phase2 ["🚀 Stages 4-6: Advanced capabilities (long-running, collaboration, integration)"]
+    subgraph Phase2 ["🚀 阶段 4-6：高级能力"]
         direction LR
-        S4["<b>4. Run long tasks</b><br/>━━━━━━━━━━━━━<br/><b>s12 Task System</b><br/>└─ persist tasks and deps<br/><br/><b>s13 Background Tasks</b><br/>└─ send slow work background<br/><br/><b>s14 Cron Scheduler</b><br/>└─ trigger by time"]:::stage4
+        S4["<b>4. 跑长任务</b><br/>━━━━━━━━━━━━━<br/><b>s12 Task System</b><br/>└─ 持久化任务和依赖<br/><br/><b>s13 Background Tasks</b><br/>└─ 慢活送后台<br/><br/><b>s14 Cron Scheduler</b><br/>└─ 按时间触发"]:::stage4
 
-        S5["<b>5. Coordinate many Agents</b><br/>━━━━━━━━━━━━━<br/><b>s15 Agent Teams</b><br/>└─ teammates + mailboxes<br/><br/><b>s16 Team Protocols</b><br/>└─ fixed request-reply format<br/><br/><b>s17 Autonomous Agents</b><br/>└─ claim work from the board<br/><br/><b>s18 Worktree Isolation</b><br/>└─ separate directories"]:::stage5
+        S5["<b>5. 多 Agent 协作</b><br/>━━━━━━━━━━━━━<br/><b>s15 Agent Teams</b><br/>└─ 队友 + 邮箱<br/><br/><b>s16 Team Protocols</b><br/>└─ 固定请求-响应格式<br/><br/><b>s17 Autonomous Agents</b><br/>└─ 自己接任务<br/><br/><b>s18 Worktree Isolation</b><br/>└─ 独立目录"]:::stage5
 
-        S6["<b>6. Extend and assemble</b><br/>━━━━━━━━━━━━━<br/><b>s07 Skill Loading</b><br/>└─ expand skills on demand<br/><br/><b>s19 MCP Plugin</b><br/>└─ external tools, one pool<br/><br/><b>s20 Comprehensive Agent</b><br/>└─ all mechanisms, one loop"]:::stage6
+        S6["<b>6. 扩展与集成</b><br/>━━━━━━━━━━━━━<br/><b>s07 Skill Loading</b><br/>└─ 按需展开 Skill<br/><br/><b>s19 MCP Plugin</b><br/>└─ 外部工具，一个池<br/><br/><b>s20 Comprehensive Agent</b><br/>└─ 所有机制，一个循环"]:::stage6
 
         S4 ==> S5 ==> S6
     end
 
-    %% Connect the two layers
     Phase1 ===> Phase2
-
     class Phase1,Phase2 groupBox
 ```
 
 ---
 
-## All Chapters
+## 所有章节
 
-| Chapter | Topic | Key Concepts |
-|---|---|---|
-| [s01](./s01_agent_loop/) | Agent Loop | `messages` / `while True` / `stop_reason` |
-| [s02](./s02_tool_use/) | Tool Use | `TOOL_HANDLERS` / dispatch map / concurrency |
-| [s03](./s03_permission/) | Permission System | `PermissionRule` / approval pipeline |
-| [s04](./s04_hooks/) | Hook System | `PreToolUse` / `PostToolUse` / extension points |
-| [s05](./s05_todo_write/) | TodoWrite | `TodoItem` / plan-then-execute |
-| [s06](./s06_subagent/) | Subagent | `fresh messages[]` / context isolation |
-| [s07](./s07_skill_loading/) | Skill Loading | `SkillManifest` / on-demand injection |
-| [s08](./s08_context_compact/) | Context Compact | snipCompact / microCompact / toolResultBudget / autoCompact |
-| [s09](./s09_memory/) | Memory System | selection / extraction / consolidation |
-| [s10](./s10_system_prompt/) | System Prompt | runtime assembly / section concatenation |
-| [s11](./s11_error_recovery/) | Error Recovery | token escalation / fallback model / retry strategies |
-| [s12](./s12_task_system/) | Task System | `TaskRecord` / `blockedBy` / disk persistence |
-| [s13](./s13_background_tasks/) | Background Tasks | threaded execution / notification queue |
-| [s14](./s14_cron_scheduler/) | Cron Scheduler | durable scheduling / session-scoped triggers |
-| [s15](./s15_agent_teams/) | Agent Teams | `MessageBus` / inbox / permission bubbling |
-| [s16](./s16_team_protocols/) | Team Protocols | shutdown handshake / plan approval |
-| [s17](./s17_autonomous_agents/) | Autonomous Agents | idle cycle / auto-claim / self-organization |
-| [s18](./s18_worktree_isolation/) | Worktree Isolation | `WorktreeRecord` / task-directory binding |
-| [s19](./s19_mcp_plugin/) | MCP Plugin | multi-transport / channel routing / tool pool assembly |
-| [s20](./s20_comprehensive/) | Comprehensive Agent | all mechanisms around one loop |
+| 章节 | 主题 | 核心概念 |
+|------|------|----------|
+| [s01](./s01_agent_loop/) | Agent Loop | `messages[]` / `while True` / `stop_reason` |
+| [s02](./s02_tool_use/) | Tool Use | `TOOL_HANDLERS` / 分发映射 / 工具扩展 |
+| [s03](./s03_permission/) | Permission | 三级权限管线 / 审批流程 |
+| [s04](./s04_hooks/) | Hook System | `PreToolUse` / `PostToolUse` / 扩展点 |
+| [s05](./s05_todo_write/) | TodoWrite | 计划先行 / nag 提醒 |
+| [s06](./s06_subagent/) | Subagent | 干净上下文 / 结果摘要 |
+| [s07](./s07_skill_loading/) | Skill Loading | `SkillManifest` / 按需注入 |
+| [s08](./s08_context_compact/) | Context Compact | snipCompact / microCompact / AutoCompact |
+| [s09](./s09_memory/) | Memory | 筛选 / 提取 / 固化 |
+| [s10](./s10_system_prompt/) | System Prompt | 运行时组装 / 按节拼接 |
+| [s11](./s11_error_recovery/) | Error Recovery | Token 升级 / 降级模型 / 重试策略 |
+| [s12](./s12_task_system/) | Task System | `TaskRecord` / `blockedBy` / 磁盘持久化 |
+| [s13](./s13_background_tasks/) | Background Tasks | 线程执行 / 通知注入 |
+| [s14](./s14_cron_scheduler/) | Cron Scheduler | 定时调度 / 会话级触发器 |
+| [s15](./s15_agent_teams/) | Agent Teams | `MessageBus` / 收件箱 |
+| [s16](./s16_team_protocols/) | Team Protocols | 关闭握手 / 计划审批 |
+| [s17](./s17_autonomous_agents/) | Autonomous Agents | 空闲循环 / 自动接单 / 自组织 |
+| [s18](./s18_worktree_isolation/) | Worktree Isolation | `WorktreeRecord` / 任务-目录绑定 |
+| [s19](./s19_mcp_plugin/) | MCP Plugin | 多传输 / 通道路由 / 工具池组装 |
+| [s20](./s20_comprehensive/) | Comprehensive | 所有机制围绕一个循环 |
 
 ---
 
-## How to Read
+## 如何阅读
 
-Each chapter is a folder. Open one and you will find:
+每个章节是一个独立文件夹：
 
 ```
 s08_context_compact/
-  README.md              # full narrative with inline code
-  README.en.md           # English translation
-  README.ja.md           # Japanese translation
-  code.py                # standalone runnable implementation
-  images/                # SVG diagrams (where needed)
+  README.md       # 中文完整叙述（含内联代码）
+  README.en.md    # 英文翻译
+  README.ja.md    # 日文翻译
+  code.py         # 独立可运行实现
+  images/         # SVG 图示
 ```
 
-Read the `README.md` for the core idea and work through the code. Complex chapters have `<details>` folds for deep dives -- open them when you want to go deeper. Simple chapters have 0-1 diagrams, complex chapters have more.
-
-Read from s01 through s20 in order. Each chapter assumes you've read the previous ones and ends with a hook into the next.
+按 s01 到 s20 顺序阅读。每章假设你已经读过前面章节，并以"下一章预告"结尾。
 
 ---
 
-## Quick Start
+## 快速开始
 
-### Current 20-Lesson Track
-
-```sh
+```bash
 git clone https://github.com/shareAI-lab/learn-claude-code
 cd learn-claude-code
 pip install -r requirements.txt
-cp .env.example .env   # configure ANTHROPIC_API_KEY
+cp .env.example .env   # 配置 ANTHROPIC_API_KEY（或其他兼容 API）
 
-python s01_agent_loop/code.py        # Start here -- one loop + bash
-python s08_context_compact/code.py   # Context compaction (complex)
-python s20_comprehensive/code.py     # Endpoint: all mechanisms in one loop
+# 从 s01 开始
+python s01_agent_loop/code.py
+
+# 学完所有章节后跑终点
+python s20_comprehensive/code.py
 ```
 
-### Legacy 12-Lesson Track
-
-```sh
-python agents/s01_agent_loop.py
-python agents/s12_worktree_task_isolation.py
-python agents/s_full.py
-```
-
-### Web Platform
-
-The current web app still renders the legacy `docs/` s01-s12 track. Use the root-level folders for the new s01-s20 track.
-
-```sh
-cd web && npm install && npm run dev   # http://localhost:3000
-```
+> **Windows 用户注意**：本分支已针对 Windows 环境做了适配（`cmd.exe` 替代 `bash`、`utf-8` 编码等），可直接运行。详见上方「Windows 环境适配」部分。
 
 ---
 
-## Project Structure
+## 项目结构
 
 ```
 learn-claude-code/
-  s01_agent_loop/          # one folder per chapter
-    README.md              #   Chinese source (complete narrative)
-    README.en.md           #   English translation
-    README.ja.md           #   Japanese translation
-    code.py                #   standalone runnable code
-    images/                #   SVG diagrams
+  s01_agent_loop/          # 每章一个文件夹
+    README.md              #   中文完整叙述
+    README.en.md           #   英文翻译
+    README.ja.md           #   日文翻译
+    code.py                #   独立可运行代码
+    images/                #   SVG 图示
   s02_tool_use/
   ...
-  s19_mcp_plugin/
-  s20_comprehensive/       # endpoint chapter
-  agents/                  # legacy 12 runnable copies + s_full.py
-  skills/                  # skill files used by s07
-  docs/                    # legacy 12-lesson docs, kept during transition
-  web/                     # currently renders the legacy docs/ track
+  s20_comprehensive/       # 终点章节（所有机制的整合）
+  agents/                  # 旧版 12 课可运行代码
+  skills/                  # s07 用到的 Skill 文件
+  docs/                    # 旧版 12 课文档
+  web/                     # 旧版文档对应的 Web 展示
   tests/
 ```
 
 ---
 
-## What's Next
+## 学完之后
 
-After 20 lessons, you understand harness engineering from the inside out. Two paths to turn that knowledge into product:
+20 课学完，你将从内部理解 Harness 工程。两条路将知识转化为产品：
 
-### Kode Agent CLI -- Open-Source Coding Agent CLI
-
-> `npm i -g @shareai-lab/kode`
-
-Skill and LSP support, Windows compatible, works with GLM / MiniMax / DeepSeek and other open models. Install and go.
-
-GitHub: **[shareAI-lab/Kode-CLI](https://github.com/shareAI-lab/Kode-CLI)**
-
-### Kode Agent SDK -- Embed Agent Capabilities in Your Application
-
-A standalone library with no per-user process overhead. Embed it in backends, browser extensions, embedded devices, or any runtime.
-
-GitHub: **[shareAI-lab/kode-agent-sdk](https://github.com/shareAI-lab/kode-agent-sdk)**
+- **[Kode Agent CLI](https://github.com/shareAI-lab/Kode-CLI)** — 开源 Coding Agent 命令行工具，支持 Skill、LSP、Windows，兼容 GLM / MiniMax / DeepSeek 等开放模型。`npm i -g @shareai-lab/kode` 即可开始。
+- **[Kode Agent SDK](https://github.com/shareAI-lab/kode-agent-sdk)** — 独立 Agent 库，无每用户进程开销。可嵌入后端、浏览器扩展、嵌入式设备等任何运行时。
 
 ---
 
-## Sister Tutorial: From Passive Sessions to Always-On Assistants
+## 姊妹教程
 
-The harness taught in this repository is the **use-and-discard** kind -- open a terminal, give the agent a task, close when done, next session starts fresh. Claude Code works this way.
+本仓库教授的 Harness 是**即用即弃**型的 — 打开终端，给 Agent 一个任务，完成后关闭。但 [OpenClaw](https://github.com/openclaw/openclaw) 证明了另一种可能：在同一个 Agent 核心上，增加两个 Harness 机制（心跳 + Cron），Agent 就能从"戳一下动一下"变成"每 30 秒自己醒来找活干"。
 
-But [OpenClaw](https://github.com/openclaw/openclaw) proves another possibility: on the same agent core, two additional harness mechanisms turn an agent from "poke it and it moves" into "wakes itself every 30 seconds to look for work":
+**[claw0](https://github.com/shareAI-lab/claw0)** 是姊妹教学仓库，从零拆解 Always-On Agent 的 Harness 机制。
 
-- **Heartbeat** -- every 30 seconds the harness sends the agent a message, letting it check for pending work. Nothing to do? Keep sleeping. Something appeared? Act immediately.
-- **Cron** -- the agent can schedule its own future tasks, which fire automatically when the time arrives.
+---
 
-Add IM multi-channel routing (WhatsApp / Telegram / Slack / Discord and 13+ other platforms), persistent context memory, and a Soul personality system, and the agent transforms from a disposable tool into an always-on personal AI assistant.
-
-**[claw0](https://github.com/shareAI-lab/claw0)** is our sister teaching repository, breaking down these harness mechanisms from scratch:
-
-```
-claw agent = agent core + heartbeat + cron + IM chat + memory + soul
-```
-
-```
-learn-claude-code                   claw0
-(agent harness internals:            (always-on harness:
- loop, tools, planning,               heartbeat, cron, IM channels,
- teams, worktree isolation)            memory, Soul personality)
-```
-
-## License
+## 许可
 
 MIT
 
 ---
 
-**Agency comes from the model. The harness gives agency a place to land. Build the harness well, and the model will do the rest.**
+**Agency 来自模型，Harness 让 Agency 有处落脚。把 Harness 造好，剩下的交给模型。**
 
-**Bash is all you need. Real agents are all the universe needs.**
-
-**This is not "copy the source code." This is "grasp the key designs and build it yourself."**
+**这不是"抄源码"，这是"理解关键设计，然后自己造"。**
