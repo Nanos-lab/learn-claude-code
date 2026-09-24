@@ -1,98 +1,69 @@
 #!/usr/bin/env python3
 """
-s06: Subagent — spawn sub-agents with fresh messages[] for context isolation.
+s06_subagent.py - Subagents
 
-  Parent Agent                           Subagent
-  +------------------+                  +------------------+
-  | messages=[...]   |                  | messages=[task]  | <-- fresh
-  |                  |   dispatch       |                  |
-  | tool: task       | ---------------> | own while loop   |
-  |   prompt="..."   |                  |   bash/read/...  |
-  |                  |   summary only   |   (max 30 turns) |
-  | result = "..."   | <--------------- | return last text |
-  +------------------+                  +------------------+
-        ^                                      |
-        |       intermediate results DISCARDED  |
-        +--------------------------------------+
+The task tool runs a second agent loop with a fresh message list. Both
+loops share the working directory, but only the final text returns to
+the parent conversation.
 
-  Subagent tools: bash, read, write, edit, glob (NO task — no recursion)
+    Parent agent                    Subagent
+    +------------------+            +------------------+
+    | messages=[...]   |            | messages=[prompt]|
+    |                  |   task     |                  |
+    | tool: task       | ---------> | own agent loop   |
+    |                  |            | base tools only  |
+    | tool_result      | <--------- | final text       |
+    +------------------+            +------------------+
 
-Changes from s05:
-  + task tool + spawn_subagent() with fresh messages[]
-  + Safety limit: max 30 turns per subagent
-  + extract_text() helper
-  Subagent cannot spawn sub-subagents (no task tool in sub_tools).
-  Main loop unchanged: task auto-dispatches via TOOL_HANDLERS.
-
-Run: python s06_subagent/code.py
-Needs: pip install anthropic python-dotenv + ANTHROPIC_API_KEY in .env
+The subagent has no task tool, so it cannot delegate again.
 """
 
-import ast, json, os, subprocess
+import os
 from pathlib import Path
-
 from anthropic import Anthropic
 from dotenv import load_dotenv
 from anthropic.types import ToolParam
 
+from Permission.Permission import check_permission
+from Hooks.Hooks import trigger_hooks
+
+from Tools.File import Tools_File_Description, File_Handler
+from Tools.Bash import Tools_Bash_Description, Bash_Handler
+from Tools.TodoWrite import Tools_TodoWrite_Description, TodoWrite_Handler
+from Tools.SubTask import Tools_SubTask_Description, SubTask_Handler
+
 load_dotenv(override=True)
+WORKDIR = Path.cwd()
 if os.getenv("ANTHROPIC_BASE_URL"):
     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-WORKDIR = Path.cwd()
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
 MODEL = os.environ["MODEL_ID"]
-CURRENT_TODOS: list[dict] = []
 
 SYSTEM = (
     f"You are a coding agent at {WORKDIR}. "
-    "For complex sub-problems, use the task tool to spawn a subagent."
+    "Before starting any task, use todo_write to plan your steps. "
+    "Update ONLY ONE todo's status per todo_write call — "
+    "mark it in_progress before you start that step, "
+    "and completed immediately after finishing that step, before moving to the next."
 )
-
-
-# ═══════════════════════════════════════════════════════════
-#  FROM s02-s05 (unchanged): Tool Implementations
-# ═══════════════════════════════════════════════════════════
-from Tools.File_Handle import File_Handle_TOOLS, File_Handle_Tools_Description
-from Tools.Todo_Write import Todo_Write_TOOLS, Todo_Write_Description
-
+# ── Tool definition: just bash ────────────────────────────
 TOOLS: list[ToolParam] = []
-TOOLS.extend(File_Handle_Tools_Description)
-TOOLS.extend(Todo_Write_Description)
+TOOLS.extend(Tools_File_Description)
+TOOLS.extend(Tools_Bash_Description)
+TOOLS.extend(Tools_TodoWrite_Description)
+TOOLS.extend(Tools_SubTask_Description)
 TOOL_HANDLERS = {}
-TOOL_HANDLERS.update(File_Handle_TOOLS)
-TOOL_HANDLERS.update(Todo_Write_TOOLS)
+TOOL_HANDLERS.update(File_Handler)
+TOOL_HANDLERS.update(Bash_Handler)
+TOOL_HANDLERS.update(TodoWrite_Handler)
+TOOL_HANDLERS.update(SubTask_Handler)
 
 
-# Add task tool to parent's tools
-from Tools.Sub_Task import Sub_Task_Description, Sub_Task_TOOLS
-
-TOOLS.extend(Sub_Task_Description)
-TOOL_HANDLERS.update(Sub_Task_TOOLS)
-
-# ═══════════════════════════════════════════════════════════
-#  FROM s04 (unchanged): Hook System
-# ═══════════════════════════════════════════════════════════
-
-from Hooks.hooks import trigger_hooks
-
-# ═══════════════════════════════════════════════════════════
-#  agent_loop — same as s05 + nag reminder, task auto-dispatches
-# ═══════════════════════════════════════════════════════════
-
-rounds_since_todo = 0
-
-
+# ── The core pattern: a while loop that calls tools until the model stops ──
 def agent_loop(messages: list):
-    global rounds_since_todo
+    rounds_since_todo = 0
     while True:
-        # s05: nag reminder
-        if rounds_since_todo >= 3 and messages:
-            messages.append(
-                {"role": "user", "content": "<reminder>Update your todos.</reminder>"}
-            )
-            rounds_since_todo = 0
-
         response = client.messages.create(
             model=MODEL,
             system=SYSTEM,
@@ -100,21 +71,24 @@ def agent_loop(messages: list):
             tools=TOOLS,
             max_tokens=8000,
         )
+
+        # Append assistant turn
         messages.append({"role": "assistant", "content": response.content})
 
-        if response.stop_reason != "tool_use":
+        # If the model didn't call a tool, we're done
+        tool_calls = [block for block in response.content if block.type == "tool_use"]
+        if not tool_calls:
             force = trigger_hooks("Stop", messages)
             if force:
                 messages.append({"role": "user", "content": force})
                 continue
             return
 
-        rounds_since_todo += 1
+        # Execute each tool call, collect results
         results = []
-        for block in response.content:
-            if block.type != "tool_use":
-                continue
-
+        used_todo = False
+        for block in tool_calls:
+            print(f"\033[33m> {block.name}\033[0m")
             blocked = trigger_hooks("PreToolUse", block)
             if blocked:
                 results.append(
@@ -125,25 +99,31 @@ def agent_loop(messages: list):
                     }
                 )
                 continue
-
             handler = TOOL_HANDLERS.get(block.name)
-            output = handler(**block.input) if handler else f"Unknown: {block.name}"
-
+            try:
+                output = handler(**block.input) if handler else f"Unknown: {block.name}"
+            except Exception as e:
+                output = f"Error: {e}"
             trigger_hooks("PostToolUse", block, output)
-
             if block.name == "todo_write":
-                rounds_since_todo = 0
-
+                used_todo = True
             results.append(
                 {"type": "tool_result", "tool_use_id": block.id, "content": output}
             )
-
+        rounds_since_todo = 0 if used_todo else rounds_since_todo + 1
+        if rounds_since_todo >= 3:
+            results.append(
+                {"type": "text", "text": "<reminder>Update your todos.</reminder>"}
+            )
+            rounds_since_todo = 0
+        # Feed tool results back, loop continues
         messages.append({"role": "user", "content": results})
 
 
+# ── Entry point ──────────────────────────────────────────
 if __name__ == "__main__":
-    print("s06: Subagent — spawn sub-agents with fresh context, summary only")
-    print("Type a question, press Enter. Type q to quit.\n")
+    print("s06: Subagent - fresh messages, final text returns")
+    print("Enter a question, press Enter to send. Type q to quit.\n")
 
     history = []
     while True:
@@ -156,7 +136,10 @@ if __name__ == "__main__":
         trigger_hooks("UserPromptSubmit", query)
         history.append({"role": "user", "content": query})
         agent_loop(history)
-        for block in history[-1]["content"]:
-            if getattr(block, "type", None) == "text":
-                print(block.text)
+        # Print the model's final text response
+        response_content = history[-1]["content"]
+        if isinstance(response_content, list):
+            for block in response_content:
+                if getattr(block, "type", None) == "text":
+                    print(block.text)
         print()

@@ -1,7 +1,14 @@
 from pathlib import Path
+from Permission.Permission import check_permission
 
 WORKDIR = Path.cwd()
-HOOKS = {"UserPromptSubmit": [], "PreToolUse": [], "PostToolUse": [], "Stop": []}
+
+HOOKS = {
+    "UserPromptSubmit": [],
+    "PreToolUse": [],
+    "PostToolUse": [],
+    "Stop": [],
+}
 
 
 def register_hook(event: str, callback):
@@ -11,38 +18,40 @@ def register_hook(event: str, callback):
 def trigger_hooks(event: str, *args):
     for callback in HOOKS[event]:
         result = callback(*args)
-        if result is not None:
+        if result is not None:  # 返回值 ≠ None → hook 说"停"
             return result
     return None
 
 
-def permission_hook(block):
-    """PreToolUse: s03 check_permission() logic moved here."""
-    if block.name in ("write_file", "edit_file", "create_file"):
-        path = block.input.get("path", "")
-        if not (WORKDIR / path).resolve().is_relative_to(WORKDIR):
-            print(f"\n\033[33m⚠  Writing outside workspace\033[0m")
-            print(f"   Tool: {block.name}({block.input})")
-            choice = input("   Allow? [y/N] ").strip().lower()
-            if choice not in ("y", "yes"):
-                return "Permission denied by user"
-    return None
-
-
-def log_hook(block):
-    """PreToolUse: log tool calls."""
-    print(f"\033[90m[HOOK] {block.name}\033[0m")
-    return None
-
-
-def context_inject_hook(query: str):
-    """UserPromptSubmit: log working directory."""
+# 显示工作目录
+def context_inject_hook(query: str) -> str | None:
+    """Inject current working directory info into every prompt."""
     print(f"\033[90m[HOOK] UserPromptSubmit: working in {WORKDIR}\033[0m")
-    return None
+    return None  # return None = no modification, let prompt through
 
 
+register_hook("UserPromptSubmit", context_inject_hook)
+
+
+# 工具调用前检查权限
+def permission_hook(block):
+    return check_permission(block)  # 返回 True = 允许，返回 False = 拒绝
+
+
+register_hook("PreToolUse", permission_hook)
+
+
+# 大文件提醒
+def large_output_hook(block, output):
+    if len(str(output)) > 100000:
+        print(f"[HOOK] ⚠ Large output from {block.name}")
+
+
+register_hook("PostToolUse", large_output_hook)
+
+
+# 结束总结
 def summary_hook(messages: list):
-    """Stop: print tool call count."""
     tool_count = sum(
         1
         for m in messages
@@ -53,7 +62,4 @@ def summary_hook(messages: list):
     return None
 
 
-register_hook("UserPromptSubmit", context_inject_hook)
-register_hook("PreToolUse", permission_hook)
-register_hook("PreToolUse", log_hook)
 register_hook("Stop", summary_hook)

@@ -23,7 +23,7 @@ without an update, the harness adds a reminder alongside the tool results.
 """
 
 import os
-
+from pathlib import Path
 from anthropic import Anthropic
 from dotenv import load_dotenv
 from anthropic.types import ToolParam
@@ -36,15 +36,20 @@ from Tools.Bash import Tools_Bash_Description, Bash_Handler
 from Tools.TodoWrite import Tools_TodoWrite_Description, TodoWrite_Handler
 
 load_dotenv(override=True)
-
+WORKDIR = Path.cwd()
 if os.getenv("ANTHROPIC_BASE_URL"):
     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
 client = Anthropic(base_url=os.getenv("ANTHROPIC_BASE_URL"))
 MODEL = os.environ["MODEL_ID"]
 
-SYSTEM = f"You are a coding agent at {os.getcwd()}. Use Windows cmd.exe to solve tasks. Act, don't explain."
-
+SYSTEM = (
+    f"You are a coding agent at {WORKDIR}. "
+    "Before starting any task, use todo_write to plan your steps. "
+    "Update ONLY ONE todo's status per todo_write call — "
+    "mark it in_progress before you start that step, "
+    "and completed immediately after finishing that step, before moving to the next."
+)
 # ── Tool definition: just bash ────────────────────────────
 TOOLS: list[ToolParam] = []
 TOOLS.extend(Tools_File_Description)
@@ -96,7 +101,10 @@ def agent_loop(messages: list):
                 )
                 continue
             handler = TOOL_HANDLERS.get(block.name)
-            output = handler(**block.input) if handler else f"Unknown: {block.name}"
+            try:
+                output = handler(**block.input) if handler else f"Unknown: {block.name}"
+            except Exception as e:
+                output = f"Error: {e}"
             trigger_hooks("PostToolUse", block, output)
             if block.name == "todo_write":
                 used_todo = True
