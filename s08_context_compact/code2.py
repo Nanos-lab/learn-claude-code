@@ -88,42 +88,83 @@ TOOL_HANDLERS.update(Skill_Loader_Tools)
 from Hooks.hooks import trigger_hooks
 
 # ═══════════════════════════════════════════════════════════
+#  FROM s04 (unchanged): Hook System
+# ═══════════════════════════════════════════════════════════
+
+from Context_Compact.Context_Compact import (
+    tool_result_budget,
+    snip_compact,
+    micro_compact,
+    compact_history,
+    reactive_compact,
+    estimate_size,
+    CONTEXT_LIMIT,
+)
+
+# ═══════════════════════════════════════════════════════════
 #  agent_loop — same as s05-s06 + nag reminder
 # ═══════════════════════════════════════════════════════════
 
 rounds_since_todo = 0
+MAX_REACTIVE_RETRIES = 1  # retry limit for reactive compact
 
 
 def agent_loop(messages: list):
-    global rounds_since_todo
+    reactive_retries = 0
     while True:
-        if rounds_since_todo >= 3 and messages:
-            messages.append(
-                {"role": "user", "content": "<reminder>Update your todos.</reminder>"}
+        # s08 change: three preprocessors (0 API calls, cheap first)
+        # Order matches CC source: budget → snip → micro
+        messages[:] = tool_result_budget(messages)  # L3: persist large results first
+        messages[:] = snip_compact(messages)  # L1: trim middle
+        messages[:] = micro_compact(messages)  # L2: old result placeholders
+
+        # s08 change: tokens still over threshold → LLM summary (1 API call)
+        if estimate_size(messages) > CONTEXT_LIMIT:
+            print("[auto compact]")
+            messages[:] = compact_history(messages)
+
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                system=SYSTEM,
+                messages=messages,
+                tools=TOOLS,
+                max_tokens=8000,
             )
-            rounds_since_todo = 0
-
-        response = client.messages.create(
-            model=MODEL,
-            system=SYSTEM,
-            messages=messages,
-            tools=TOOLS,
-            max_tokens=8000,
-        )
-        messages.append({"role": "assistant", "content": response.content})
-
-        if response.stop_reason != "tool_use":
-            force = trigger_hooks("Stop", messages)
-            if force:
-                messages.append({"role": "user", "content": force})
+            reactive_retries = 0  # reset on successful API call
+        except Exception as e:
+            if (
+                "prompt_too_long" in str(e).lower()
+                or "too many tokens" in str(e).lower()
+            ) and reactive_retries < MAX_REACTIVE_RETRIES:
+                print("[reactive compact]")
+                messages[:] = reactive_compact(messages)
+                reactive_retries += 1
                 continue
+            raise
+
+        messages.append({"role": "assistant", "content": response.content})
+        if response.stop_reason != "tool_use":
             return
 
-        rounds_since_todo += 1
         results = []
         for block in response.content:
             if block.type != "tool_use":
                 continue
+            print(f"\033[36m> {block.name}\033[0m")
+
+            # s08: compact tool triggers compact_history, not a no-op string
+            if block.name == "compact":
+                messages[:] = compact_history(messages)
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "[Compacted. Conversation history has been summarized.]",
+                    }
+                )
+                messages.append({"role": "user", "content": results})
+                break  # end current turn, start fresh with compacted context
 
             blocked = trigger_hooks("PreToolUse", block)
             if blocked:
@@ -135,30 +176,29 @@ def agent_loop(messages: list):
                     }
                 )
                 continue
-
             handler = TOOL_HANDLERS.get(block.name)
             output = handler(**block.input) if handler else f"Unknown: {block.name}"
-
             trigger_hooks("PostToolUse", block, output)
-
-            if block.name == "todo_write":
-                rounds_since_todo = 0
-
+            print(str(output)[:200])
             results.append(
-                {"type": "tool_result", "tool_use_id": block.id, "content": output}
+                {"type": "tool_result", "tool_use_id": block.id, "content": str(output)}
             )
-
-        messages.append({"role": "user", "content": results})
+        else:
+            # normal path: no compact was called
+            messages.append({"role": "user", "content": results})
+            continue
+        # compact was called: results already appended above
+        continue
 
 
 if __name__ == "__main__":
-    print("s07: Skill Loading — catalog in SYSTEM, content on demand")
+    print("s08: Skill Loading — catalog in SYSTEM, content on demand")
     print("Type a question, press Enter. Type q to quit.\n")
 
     history = []
     while True:
         try:
-            query = input("\033[36ms07 >> \033[0m")
+            query = input("\033[36ms08 >> \033[0m")
         except (EOFError, KeyboardInterrupt):
             break
         if query.strip().lower() in ("q", "exit", ""):

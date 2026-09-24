@@ -45,45 +45,25 @@ MODEL = os.environ["MODEL_ID"]
 SYSTEM = f"You are a coding agent at {os.getcwd()}. Use Windows cmd.exe to solve tasks. Act, don't explain."
 
 # ── Tool definition: just bash ────────────────────────────
-TOOLS: list[ToolParam] = [
-    {
-        "name": "run_command",  # 1. 将工具名称改为更通用或偏向 Windows 的名称
-        "description": "Run a Windows command line (cmd.exe) command.",  # 2. 描述中明确说明这是 Windows 命令行
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The cmd.exe command to run, e.g., 'dir' or 'ipconfig'.",  # 3. 增加提示，引导模型输出正确的 Windows 命令
-                }
-            },
-            "required": ["command"],
-        },
-    }
-]
+TOOLS: list[ToolParam] = [{
+    "name": "bash",
+    "description": "Run a shell command.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"command": {"type": "string"}},
+        "required": ["command"],
+    },
+}]
 
 
 # ── Tool execution ────────────────────────────────────────
-def run_command(command: str) -> str:
-    dangerous = [
-        "rmdir /s",
-        "del /f /s",
-        "format ",
-        "reg delete",
-        "shutdown /",
-        "powershell -Command",
-    ]
+def run_bash(command: str) -> str:
+    dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
     if any(d in command for d in dangerous):
         return "Error: Dangerous command blocked"
     try:
-        r = subprocess.run(
-            command,
-            shell=True,
-            cwd=os.getcwd(),
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        r = subprocess.run(command, shell=True, cwd=os.getcwd(),
+                           capture_output=True, text=True, errors="replace", timeout=120)
         out = (r.stdout + r.stderr).strip()
         return out[:50000] if out else "(no output)"
     except subprocess.TimeoutExpired:
@@ -96,35 +76,29 @@ def run_command(command: str) -> str:
 def agent_loop(messages: list):
     while True:
         response = client.messages.create(
-            model=MODEL,
-            system=SYSTEM,
-            messages=messages,
-            tools=TOOLS,
-            max_tokens=8000,
+            model=MODEL, system=SYSTEM, messages=messages,
+            tools=TOOLS, max_tokens=8000,
         )
 
         # Append assistant turn
         messages.append({"role": "assistant", "content": response.content})
 
         # If the model didn't call a tool, we're done
-        if response.stop_reason != "tool_use":
+        tool_calls = [
+            block for block in response.content if block.type == "tool_use"
+        ]
+        if not tool_calls:
             return
 
         # Execute each tool call, collect results
         results = []
-        for block in response.content:
-            if block.type == "tool_use":
-                if isinstance(block.input["command"], str):
-                    print(f"\033[33m$ {block.input['command']}\033[0m")
-                    output = run_command(block.input["command"])
-                    print(output[:200])
-                results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": output,
-                    }
-                )
+        for block in tool_calls:
+            output = run_bash(block.input["command"])
+            results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": output,
+            })
 
         # Feed tool results back, loop continues
         messages.append({"role": "user", "content": results})
@@ -133,7 +107,7 @@ def agent_loop(messages: list):
 # ── Entry point ──────────────────────────────────────────
 if __name__ == "__main__":
     print("s01: Agent Loop")
-    print("输入问题，回车发送。输入 q 退出。\n")
+    print("Enter a question, press Enter to send. Type q to quit.\n")
 
     history = []
     while True:
